@@ -134,6 +134,9 @@ Este es un ejemplo de un cuerpo JSON para una venta con dos productos y un pago 
   * **Manejo de Pagos Mixtos**: Para ventas con más de un método de pago, el servidor genera comandos de pago parcial (`2xx`) para los N-1 primeros pagos y un comando de pago totalizador (`1xx`) para el último, seguido del cierre `199` si aplica.
 
 
+
+
+
 # Manual de Flags para Impresoras Fiscales The Factory HKA
 
 ## 1. ¿Qué son los Flags?
