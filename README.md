@@ -249,6 +249,3 @@ Este es un Flag avanzado que modifica la longitud de los datos que la impresora 
 -----
 
 **Nota Final**: La cantidad y función de los Flags puede variar ligeramente entre modelos de impresora. Esta guía cubre los más comunes y esenciales basados en la documentación V8.5.0.
-
-```
-```
