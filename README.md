@@ -180,10 +180,10 @@ A continuación se detallan los Flags más importantes para la integración de u
 
 Este es el Flag más importante para cumplir con la normativa fiscal venezolana sobre pagos en divisas.
 
-  * [cite\_start]**Descripción**: Habilita o deshabilita el cálculo e impresión del IGTF. [cite: 2717, 2946]
+  * **Descripción**: Habilita o deshabilita el cálculo e impresión del IGTF. 
   * **Valores**:
-      * `00`: **Desactivado**. La impresora no calculará IGTF. Los medios de pago del 20 al 24 (reservados para divisas) estarán bloqueados. [cite\_start]El cierre de factura se hace con los comandos `1xx` normales. [cite: 2703, 2716, 2959]
-      * `01`: **Activado**. [cite\_start]La impresora calculará automáticamente el IGTF cuando se usen los medios de pago del 20 al 24. **Es obligatorio cerrar TODOS los documentos fiscales (facturas, notas de crédito, etc.) con el comando `199`**, sin importar si la venta se pagó en bolívares o divisas. [cite: 2703, 2717, 2946, 2957]
+      * `00`: **Desactivado**. La impresora no calculará IGTF. Los medios de pago del 20 al 24 (reservados para divisas) estarán bloqueados. El cierre de factura se hace con los comandos `1xx` normales.
+      * `01`: **Activado**. La impresora calculará automáticamente el IGTF cuando se usen los medios de pago del 20 al 24. **Es obligatorio cerrar TODOS los documentos fiscales (facturas, notas de crédito, etc.) con el comando `199`**, sin importar si la venta se pagó en bolívares o divisas.
   * **Comando para Activar**:
     ```
     PJ5001
@@ -193,11 +193,11 @@ Este es el Flag más importante para cumplir con la normativa fiscal venezolana 
 
 Este Flag define cómo la impresora interpreta los números en los comandos de productos, específicamente la cantidad de dígitos enteros y decimales. Es crucial para evitar errores de formato en los precios.
 
-  * [cite\_start]**Descripción**: Cambia la precisión de los precios unitarios de los productos. [cite: 2703]
+  * **Descripción**: Cambia la precisión de los precios unitarios de los productos.
   * **Valores Comunes**:
-      * `00`: **Estándar**. El precio se interpreta como 8 enteros y 2 decimales (Ej: `12345678.99`). [cite\_start]Este es el valor por defecto y el más compatible. [cite: 786]
-      * [cite\_start]`01`: El precio se interpreta como 7 enteros y 3 decimales. [cite: 786, 2703]
-      * [cite\_start]`02`: El precio se interpreta como 6 enteros y 4 decimales. [cite: 786, 2703]
+      * `00`: **Estándar**. El precio se interpreta como 8 enteros y 2 decimales (Ej: `12345678.99`). Este es el valor por defecto y el más compatible.
+      * `01`: El precio se interpreta como 7 enteros y 3 decimales.
+      * `02`: El precio se interpreta como 6 enteros y 4 decimales.
   * **Comando para modo estándar**:
     ```
     PJ2100
@@ -208,10 +208,10 @@ Este Flag define cómo la impresora interpreta los números en los comandos de p
 
 Controla si el número legible por humanos se imprime junto al código de barras.
 
-  * [cite\_start]**Descripción**: Define la visualización del número asociado a un código de barras. [cite: 982, 984]
+  * **Descripción**: Define la visualización del número asociado a un código de barras.
   * **Valores**:
-      * [cite\_start]`00`: Imprime el código de barras **sin** el número debajo. [cite: 2703, 982]
-      * [cite\_start]`01`: Imprime el código de barras **con** el número asociado debajo. [cite: 2703, 984]
+      * `00`: Imprime el código de barras **sin** el número debajo.
+      * `01`: Imprime el código de barras **con** el número asociado debajo. 
   * **Comando para imprimir con número**:
     ```
     PJ3001
@@ -221,12 +221,12 @@ Controla si el número legible por humanos se imprime junto al código de barras
 
 Selecciona el formato del código de barras a imprimir.
 
-  * [cite\_start]**Descripción**: Define la simbología del código de barras. [cite: 2703]
+  * **Descripción**: Define la simbología del código de barras.
   * **Valores Comunes**:
-      * [cite\_start]`00`: EAN-13 [cite: 2703]
-      * [cite\_start]`02`: Code 128 [cite: 2703]
-      * [cite\_start]`03`: Code 39 [cite: 2703]
-      * [cite\_start]`04`: Código QR [cite: 2703]
+      * `00`: EAN-13
+      * `02`: Code 128 
+      * `03`: Code 39 
+      * `04`: Código QR
   * **Comando para seleccionar QR**:
     ```
     PJ4304
@@ -236,10 +236,10 @@ Selecciona el formato del código de barras a imprimir.
 
 Este es un Flag avanzado que modifica la longitud de los datos que la impresora devuelve al solicitar reportes (como el Reporte X) o estados (como el Status S2).
 
-  * [cite\_start]**Descripción**: Controla si las respuestas de la impresora usan un formato de datos "reducido" (legacy) o "ampliado" (moderno, con campos más largos para IGTF). [cite: 2703, 2960]
+  * **Descripción**: Controla si las respuestas de la impresora usan un formato de datos "reducido" (legacy) o "ampliado" (moderno, con campos más largos para IGTF).
   * **Valores Clave (Modo IGTF)**:
-      * [cite\_start]`16` y `18`: Formato **reducido** con campos para IGTF. [cite: 2703, 2975]
-      * [cite\_start]`17` y `19`: Formato **ampliado** con campos para IGTF. [cite: 2703, 2975]
+      * `16` y `18`: Formato **reducido** con campos para IGTF.
+      * `17` y `19`: Formato **ampliado** con campos para IGTF.
   * **Observación**: Para nuevas integraciones, se recomienda usar los valores de formato ampliado (`17` o `19`) ya que proporcionan campos más grandes y son más robustos a futuro. Sin embargo, esto requiere que el software que lee la respuesta de la impresora esté preparado para procesar una cadena de texto más larga.
   * **Comando para modo ampliado con IGTF**:
     ```
