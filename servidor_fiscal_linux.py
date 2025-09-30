@@ -1,6 +1,6 @@
-# Archivo: servidor_fiscal.py (Versión para Linux)
-# Servidor de impresión para impresoras fiscales The Factory HKA.
-# Maneja facturación estándar, pagos mixtos y IGTF.
+# Archivo: servidor_fiscal_linux.py
+# Servidor de impresión para impresoras fiscales The Factory HKA en Linux.
+# Maneja facturación, pagos mixtos, IGTF, reportes X/Z y test de conexión.
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import subprocess
@@ -13,16 +13,13 @@ app = Flask(__name__)
 CORS(app)
 
 # --- CONFIGURACIÓN PARA LINUX ---
-# Obtiene el home del usuario actual para construir la ruta dinámicamente.
 HOME_DIR = os.path.expanduser("~")
 COMANDOS_DIR = os.path.join(HOME_DIR, "IntTFHKA")
-# Nombre del ejecutable para Linux
 EXECUTABLE_NAME = "Tfinulx"
 INTTFHKA_PATH = os.path.join(COMANDOS_DIR, EXECUTABLE_NAME)
 
 # --- CONFIGURACIÓN DE IMPUESTOS ---
-# Slots de pago que la impresora considera como Divisa y que activan el IGTF.
-IGTF_SLOTS = [20, 21, 22, 23, 24]
+IGTF_SLOTS = [20, 21, 22, 23, 24] # Slots de pago que activan el IGTF.
 
 #=============================================================================
 # FUNCIÓN CENTRAL DE COMUNICACIÓN
@@ -32,7 +29,6 @@ def ejecutar_comando_fiscal(comando_str, lineas_esperadas=None):
     Ejecuta un comando en Tfinulx y valida la respuesta.
     """
     print(f"Ejecutando: {comando_str}")
-    # En Linux, es común ejecutar el comando directamente desde su directorio.
     comando_completo = f"./{EXECUTABLE_NAME} '{comando_str}'"
     try:
         resultado_proceso = subprocess.run(
@@ -68,6 +64,50 @@ def ejecutar_comando_fiscal(comando_str, lineas_esperadas=None):
             raise Exception(f"Comando falló. Respuesta de la impresora: '{salida_texto}'")
     except Exception as e:
         raise e
+
+#=============================================================================
+# ENDPOINTS DE UTILIDAD (NUEVOS)
+#=============================================================================
+@app.route('/test-fiscal', methods=['GET'])
+def test_impresora_fiscal():
+    """
+    Envía un comando simple (imprimir configuración) para verificar la conexión.
+    """
+    try:
+        respuesta = ejecutar_comando_fiscal('SendCmd(D)')
+        return jsonify({"message": "Prueba de conexión fiscal exitosa.", "respuesta_impresora": respuesta}), 200
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": f"Error en la prueba fiscal: {str(e)}"}), 500
+
+@app.route('/imprimir-reporte-fiscal', methods=['POST'])
+def imprimir_reporte_fiscal():
+    """
+    Emite un reporte fiscal X o Z.
+    Recibe: {"tipo": "X"} o {"tipo": "Z"}
+    """
+    try:
+        data = request.get_json()
+        if not data or 'tipo' not in data:
+            return jsonify({"error": "Payload incorrecto. Se esperaba {'tipo': 'X' | 'Z'}"}), 400
+
+        tipo_reporte = data.get('tipo', '').upper()
+        
+        if tipo_reporte == 'X':
+            comando = 'SendCmd(I0X)'
+        elif tipo_reporte == 'Z':
+            comando = 'SendCmd(I0Z)'
+        else:
+            return jsonify({"error": "Tipo de reporte no válido. Use 'X' o 'Z'."}), 400
+
+        print(f"\n--- INICIANDO IMPRESIÓN DE REPORTE {tipo_reporte} ---")
+        respuesta = ejecutar_comando_fiscal(comando)
+        
+        return jsonify({"message": f"Comando para Reporte '{tipo_reporte}' enviado correctamente.", "respuesta_impresora": respuesta}), 200
+
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": f"Error imprimiendo reporte fiscal: {str(e)}"}), 500
 
 #=============================================================================
 # ENDPOINT PRINCIPAL DE FACTURACIÓN
