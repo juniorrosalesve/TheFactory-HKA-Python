@@ -132,3 +132,123 @@ Este es un ejemplo de un cuerpo JSON para una venta con dos productos y un pago 
   * **Arquitectura de Archivo Único**: El servidor genera un archivo de texto (`factura_actual.txt`) con la secuencia completa de comandos (cliente, items, subtotal, pagos) y lo envía a la impresora con una sola instrucción (`SendFileCmd`), lo que garantiza transacciones atómicas.
   * **Manejo de IGTF**: El IGTF es calculado **automáticamente por la impresora**. El servidor solo necesita detectar si se usó un método de pago de divisa (slots 20-24) para añadir el comando de cierre obligatorio `199` al final de la secuencia.
   * **Manejo de Pagos Mixtos**: Para ventas con más de un método de pago, el servidor genera comandos de pago parcial (`2xx`) para los N-1 primeros pagos y un comando de pago totalizador (`1xx`) para el último, seguido del cierre `199` si aplica.
+
+
+# Manual de Flags para Impresoras Fiscales The Factory HKA
+
+## 1. ¿Qué son los Flags?
+
+Los "Flags" (o Banderas) son configuraciones internas que controlan el comportamiento de la impresora fiscal. Permiten activar, desactivar o modificar funcionalidades específicas, como el cálculo de impuestos (IGTF), el formato de los precios o la impresión de códigos de barras.
+
+Cada Flag se identifica con un número de 2 dígitos y se le asigna un valor, también de 2 dígitos.
+
+## 2. ¿Cómo se programa un Flag?
+
+Para programar un Flag, se utiliza el comando `PJ` seguido del número del Flag y el valor que se le quiere asignar.
+
+**Formato del Comando:**
+`PJ<NumeroFlag><ValorFlag>`
+
+* **`NumeroFlag`**: El identificador del Flag (2 dígitos).
+* **`ValorFlag`**: El valor de configuración que se le asignará (2 dígitos).
+
+**Ejemplo Práctico:**
+Para activar el modo IGTF, se debe poner el **Flag 50** en el valor **01**. El comando a enviar sería:
+
+```
+
+PJ5001
+
+````
+
+Este comando se envía a la impresora a través de la utilidad `IntTfhka.exe` (o `Tfinulx` en Linux):
+```bash
+# En Windows
+IntTFHKA SendCmd(PJ5001)
+
+# En Linux
+./Tfinulx SendCmd(PJ5001)
+````
+
+-----
+
+## 3\. Guía de Flags Esenciales
+
+A continuación se detallan los Flags más importantes para la integración de un sistema de punto de venta.
+
+### Flag 50 - Impuesto a las Grandes Transacciones Financieras (IGTF)
+
+Este es el Flag más importante para cumplir con la normativa fiscal venezolana sobre pagos en divisas.
+
+  * [cite\_start]**Descripción**: Habilita o deshabilita el cálculo e impresión del IGTF. [cite: 2717, 2946]
+  * **Valores**:
+      * `00`: **Desactivado**. La impresora no calculará IGTF. Los medios de pago del 20 al 24 (reservados para divisas) estarán bloqueados. [cite\_start]El cierre de factura se hace con los comandos `1xx` normales. [cite: 2703, 2716, 2959]
+      * `01`: **Activado**. [cite\_start]La impresora calculará automáticamente el IGTF cuando se usen los medios de pago del 20 al 24. **Es obligatorio cerrar TODOS los documentos fiscales (facturas, notas de crédito, etc.) con el comando `199`**, sin importar si la venta se pagó en bolívares o divisas. [cite: 2703, 2717, 2946, 2957]
+  * **Comando para Activar**:
+    ```
+    PJ5001
+    ```
+
+### Flag 21 - Formato de Montos y Precios
+
+Este Flag define cómo la impresora interpreta los números en los comandos de productos, específicamente la cantidad de dígitos enteros y decimales. Es crucial para evitar errores de formato en los precios.
+
+  * [cite\_start]**Descripción**: Cambia la precisión de los precios unitarios de los productos. [cite: 2703]
+  * **Valores Comunes**:
+      * `00`: **Estándar**. El precio se interpreta como 8 enteros y 2 decimales (Ej: `12345678.99`). [cite\_start]Este es el valor por defecto y el más compatible. [cite: 786]
+      * [cite\_start]`01`: El precio se interpreta como 7 enteros y 3 decimales. [cite: 786, 2703]
+      * [cite\_start]`02`: El precio se interpreta como 6 enteros y 4 decimales. [cite: 786, 2703]
+  * **Comando para modo estándar**:
+    ```
+    PJ2100
+    ```
+  * **Observación**: Para la mayoría de las integraciones, se recomienda mantener este Flag en `00` para asegurar la compatibilidad.
+
+### Flag 30 - Impresión de Códigos de Barras
+
+Controla si el número legible por humanos se imprime junto al código de barras.
+
+  * [cite\_start]**Descripción**: Define la visualización del número asociado a un código de barras. [cite: 982, 984]
+  * **Valores**:
+      * [cite\_start]`00`: Imprime el código de barras **sin** el número debajo. [cite: 2703, 982]
+      * [cite\_start]`01`: Imprime el código de barras **con** el número asociado debajo. [cite: 2703, 984]
+  * **Comando para imprimir con número**:
+    ```
+    PJ3001
+    ```
+
+### Flag 43 - Tipo de Código de Barras
+
+Selecciona el formato del código de barras a imprimir.
+
+  * [cite\_start]**Descripción**: Define la simbología del código de barras. [cite: 2703]
+  * **Valores Comunes**:
+      * [cite\_start]`00`: EAN-13 [cite: 2703]
+      * [cite\_start]`02`: Code 128 [cite: 2703]
+      * [cite\_start]`03`: Code 39 [cite: 2703]
+      * [cite\_start]`04`: Código QR [cite: 2703]
+  * **Comando para seleccionar QR**:
+    ```
+    PJ4304
+    ```
+
+### Flag 63 - Formato de Reportes y Status
+
+Este es un Flag avanzado que modifica la longitud de los datos que la impresora devuelve al solicitar reportes (como el Reporte X) o estados (como el Status S2).
+
+  * [cite\_start]**Descripción**: Controla si las respuestas de la impresora usan un formato de datos "reducido" (legacy) o "ampliado" (moderno, con campos más largos para IGTF). [cite: 2703, 2960]
+  * **Valores Clave (Modo IGTF)**:
+      * [cite\_start]`16` y `18`: Formato **reducido** con campos para IGTF. [cite: 2703, 2975]
+      * [cite\_start]`17` y `19`: Formato **ampliado** con campos para IGTF. [cite: 2703, 2975]
+  * **Observación**: Para nuevas integraciones, se recomienda usar los valores de formato ampliado (`17` o `19`) ya que proporcionan campos más grandes y son más robustos a futuro. Sin embargo, esto requiere que el software que lee la respuesta de la impresora esté preparado para procesar una cadena de texto más larga.
+  * **Comando para modo ampliado con IGTF**:
+    ```
+    PJ6317
+    ```
+
+-----
+
+**Nota Final**: La cantidad y función de los Flags puede variar ligeramente entre modelos de impresora. Esta guía cubre los más comunes y esenciales basados en la documentación V8.5.0.
+
+```
+```
