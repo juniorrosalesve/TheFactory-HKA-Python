@@ -32,7 +32,7 @@ El servidor expone un endpoint HTTP simple que recibe los datos de una factura e
 
 -----
 
-## Configuración de la Impresora Fiscal (¡Importante\!)
+## Configuración de la Impresora Fiscal (Opcional\)
 
 Antes de usar el servidor, debes enviar dos comandos de configuración a tu impresora. Puedes hacerlo una sola vez desde la línea de comandos, ubicado en la carpeta de la utilidad.
 
