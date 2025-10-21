@@ -1,254 +1,240 @@
-# Servidor de Impresión Fiscal The Factory HKA en Python
+# Servidor de Impresión Fiscal y No Fiscal (Multiplataforma)
 
-Este proyecto es un servidor web intermediario, escrito en Python con Flask, que permite a cualquier sistema de punto de venta (POS) comunicarse con las impresoras fiscales de The Factory HKA a través de su utilidad `IntTfhka.exe` (para Windows) o `Tfinulx` (para Linux).
+Este proyecto es un servidor de impresión basado en Flask (Python) diseñado para actuar como un puente robusto entre una aplicación web (como un sistema POS) y las impresoras USB locales.
 
-El servidor expone un endpoint HTTP simple que recibe los datos de una factura en formato JSON y los traduce a la secuencia de comandos correcta para la impresora fiscal, incluyendo el manejo avanzado de **pagos mixtos** y el cálculo automático del **IGTF**.
+Maneja dos tipos de impresión de forma concurrente:
+1.  **Impresión Fiscal:** Para impresoras fiscales (probado con modelos TFHKA) para emitir facturas, notas de crédito y reportes X/Z.
+2.  **Impresión No Fiscal:** Para impresoras térmicas de recibos (tickeras) para imprimir comandas de cocina, notas de entrega, recibos de pago y diagnósticos.
 
------
+La característica principal de este servidor es su capacidad para ser **multiplataforma** (detecta automáticamente Windows/Linux) y **multi-caja** (gestiona múltiples impresoras fiscales desde una sola instancia).
 
-## Requisitos
+## 🚀 Características Principales
 
-  * Python 3.7 o superior.
-  * Flask: `pip install Flask`.
-  * La utilidad de comunicación proporcionada por The Factory HKA (`IntTfhka.exe` para Windows o `Tfinulx` para Linux).
-  * Una impresora fiscal The Factory HKA compatible con IGTF.
+* **Impresión Fiscal y No Fiscal:** Maneja ambos mundos de impresión desde una sola API.
+* **Detección Automática de SO:** El mismo script funciona en Windows y Linux sin necesidad de cambios. Adapta automáticamente las rutas (`C:\` vs. `/home/`) y los comandos de ejecución (`IntTFHKA.exe` vs. `tfinulx`).
+* **Arquitectura Multi-Caja (UUID):** Permite gestionar múltiples impresoras fiscales conectadas al mismo servidor. Cada impresora se identifica por un `terminalUUID` único, lo que permite al POS centralizado dirigir impresiones a cajas específicas.
+* **Manejo de Concurrencia:** Utiliza un sistema de `Lock` por cada impresora fiscal para evitar que dos solicitudes intenten imprimir en la misma impresora al mismo tiempo, previniendo corrupción de datos.
+* **Sincronización Robusta:** Fuerza la sincronización de archivos con el disco (`fsync` / `sync`) antes de enviar a imprimir, evitando problemas de caché del SO (crítico en Linux) donde la impresora podría leer un archivo de comandos vacío o incompleto.
+* **API RESTful Sencilla:** Se controla todo mediante endpoints JSON simples.
 
------
+---
 
-## Instalación y Configuración
+## 📋 Requisitos Previos
 
-1.  **Estructura de Carpetas**:
+Asegúrate de tener lo siguiente instalado en el equipo que actuará como servidor de impresión.
 
-      * **Windows**: Crea una carpeta llamada `IntTFHKA` en la raíz de tu disco `C:\`. La ruta debe ser `C:\IntTFHKA`.
-      * **Linux**: Crea una carpeta llamada `IntTFHKA` en el directorio de tu usuario. La ruta sería `/home/tu_usuario/IntTFHKA`.
-
-2.  **Archivos de The Factory**: Coloca la utilidad (`IntTfhka.exe` o `Tfinulx`) y todos sus archivos asociados dentro de la carpeta que creaste.
-
-3.  **Servidor Python**: Coloca el archivo del servidor (`servidor_fiscal.py`) dentro de esa misma carpeta.
-
-      * **Importante**: Asegúrate de que las variables de ruta dentro del archivo `servidor_fiscal.py` (`INTTFHKA_PATH` y `COMANDOS_DIR`) coincidan con la ruta de tu sistema operativo.
-
-4.  **Configurar Puerto COM**: Crea un archivo de texto llamado `Puerto.dat` en la misma carpeta. Dentro de este archivo, escribe únicamente el puerto al que está conectada tu impresora (ej. `COM3` en Windows, o `/dev/ttyS0` o `/dev/ttyUSB0` en Linux).
-
------
-
-## Configuración de la Impresora Fiscal (Opcional\)
-
-Antes de usar el servidor, debes enviar dos comandos de configuración a tu impresora. Puedes hacerlo una sola vez desde la línea de comandos, ubicado en la carpeta de la utilidad.
-
-### 1\. Activar Modo IGTF
-
-Para que la impresora pueda procesar pagos en divisas y el comando de cierre `199`, debes activar el **Flag 50**.
-
-**Comando en Windows:**
-
-```bash
-IntTFHKA SendCmd(PJ5001)
-```
-
-**Comando en Linux:**
-
-```bash
-./Tfinulx SendCmd(PJ5001)
-```
-
-### 2\. Personalizar Nombres de Métodos de Pago
-
-Puedes cambiar los nombres por defecto de los "slots" de pago para que sean más descriptivos en los recibos. Se usa el comando `PE`.
-
-**Ejemplos:**
-
-```bash
-# Cambiar Slot 01 a "PAGO MOVIL BS"
-IntTFHKA SendCmd(PE01PAGO MOVIL BS)
-
-# Cambiar Slot 20 a "EFECTIVO DIVISA"
-IntTFHKA SendCmd(PE20EFECTIVO DIVISA)
-```
-
------
-
-## Código del Servidor (`servidor_fiscal.py`)
-
-El código fuente del servidor Python debe colocarse en esta carpeta. Su función principal es recibir las peticiones JSON y generar el archivo `factura_actual.txt` que se enviará a la impresora.
-
------
-
-## Cómo Usar el Servidor
-
-1.  **Ejecutar el Servidor**: Abre una terminal en la carpeta de instalación (`C:\IntTFHKA` o `/home/tu_usuario/IntTFHKA`) y ejecuta el comando:
-
+### 1. Software
+* [Python 3.x](https://www.python.org/downloads/)
+* Las siguientes librerías de Python (instálalas con `pip`):
     ```bash
-    python servidor_fiscal.py
+    pip install Flask Flask-CORS pyusb python-escpos
     ```
 
-    El servidor comenzará a escuchar en el puerto 5000, accesible desde tu red local.
+### 2. Controladores (Drivers)
 
-2.  **Enviar Datos de Factura**: Desde tu sistema POS (Flutter, web, etc.), envía una petición `POST` al endpoint `/imprimir-factura-fiscal`. El cuerpo de la petición debe ser un JSON con la estructura que se muestra a continuación.
+#### Para Impresora Fiscal (Windows y Linux)
+* Necesitarás el **ejecutable** proporcionado por el fabricante para la comunicación.
+    * **En Windows:** Generalmente un archivo `.exe` como `IntTFHKA.exe` o `Tfhka.exe`.
+    * **En Linux:** Un binario compilado, como `tfinulx`.
 
-### Ejemplo de Payload JSON
+#### Para Impresora No Fiscal (Tickera)
+* **En Linux:** Generalmente funciona sin drivers adicionales (`pyusb` la detecta).
+* **En Windows (¡IMPORTANTE!):** La impresora térmica estándar instala un driver de Windows que *bloquea* el acceso de `pyusb`. Es **necesario** usar la herramienta [**Zadig**](https://zadig.akeo.ie/) para reemplazar el driver de la impresora por `libusb-win32` o `libusbK`. Sin este paso, la impresión no fiscal fallará en Windows.
 
-Este es un ejemplo de un cuerpo JSON para una venta con dos productos y un pago mixto (parte en divisa y parte en bolívares).
+---
 
-**Nota Importante**: Todos los montos en el payload (`precio_unitario_con_iva` y `monto` de pago) deben estar expresados en **Bolívares (Bs.)**. Tu aplicación cliente es responsable de hacer la conversión de USD a Bs antes de enviar los datos.
+## ⚙️ Configuración
 
-```json
-{
-  "cliente": {
-    "rif": "V12345678",
-    "razon_social": "Cliente de Ejemplo"
-  },
-  "items": [
-    {
-      "descripcion": "PRODUCTO CON IVA 16%",
-      "cantidad": 2.0,
-      "precio_unitario_con_iva": 116.00,
-      "tasa_iva": 16.0
-    },
-    {
-      "descripcion": "PRODUCTO EXENTO",
-      "cantidad": 1.0,
-      "precio_unitario_con_iva": 50.00,
-      "tasa_iva": 0.0
-    }
-  ],
-  "pagos": [
-    {
-      "monto": 100.00,
-      "slot_fiscal": 20
-    },
-    {
-        "monto": 182.00,
-        "slot_fiscal": 1
-    }
-  ]
-}
+La configuración se divide en dos partes: editar las constantes en el script y organizar la estructura de carpetas.
+
+### 1. Configuración del Script
+
+Abre el archivo `.py` y ajusta las siguientes variables en la sección de configuración:
+
+```python
+# --- CONFIGURACIÓN PARA IMPRESORA NO FISCAL (USB DIRECTO) ---
+# ¡Obligatorio! Encuentra estos valores en el Administrador de Dispositivos (Win) o con `lsusb` (Linux)
+VENDOR_ID = 0x0483
+PRODUCT_ID = 0x5743
+ANCHO_TICKET = 42
+
+# --- CONFIGURACIÓN DE RUTAS DINÁMICAS (FISCAL) ---
+# ¡Obligatorio! Ajusta estos valores según tu SO.
+# El script detecta el SO, solo necesitas asegurarte de que estas rutas
+# y ejecutables sean correctos para cada entorno.
+
+if SISTEMA_OPERATIVO == "Windows":
+    EXECUTABLE_FISCAL = "IntTFHKA.exe" 
+    BASE_FISCAL_PATH = "C:\\ServidorFiscal" 
+else:
+    EXECUTABLE_FISCAL = "tfinulx"
+    USER = "zante" # Cambia esto a tu usuario de Linux si es diferente
+    BASE_FISCAL_PATH = f"/home/{USER}"
 ```
 
------
+### 2. Estructura de Carpetas (Clave del Multi-Caja)
 
-## Lógica Clave de la Impresión Fiscal
+Este servidor está diseñado para que `BASE_FISCAL_PATH` sea la **carpeta contenedora** de todas tus impresoras. El sistema funciona asignando un **UUID (Identificador Único Universal)** a cada caja/impresora.
 
-  * **Arquitectura de Archivo Único**: El servidor genera un archivo de texto (`factura_actual.txt`) con la secuencia completa de comandos (cliente, items, subtotal, pagos) y lo envía a la impresora con una sola instrucción (`SendFileCmd`), lo que garantiza transacciones atómicas.
-  * **Manejo de IGTF**: El IGTF es calculado **automáticamente por la impresora**. El servidor solo necesita detectar si se usó un método de pago de divisa (slots 20-24) para añadir el comando de cierre obligatorio `199` al final de la secuencia.
-  * **Manejo de Pagos Mixtos**: Para ventas con más de un método de pago, el servidor genera comandos de pago parcial (`2xx`) para los N-1 primeros pagos y un comando de pago totalizador (`1xx`) para el último, seguido del cierre `199` si aplica.
+Tu aplicación POS deberá enviar este `terminalUUID` en cada solicitud a la API. El servidor usará ese UUID para encontrar la carpeta correcta y el ejecutable correspondiente.
 
+**REGLA DE ORO:** Cada impresora fiscal debe tener su propia subcarpeta dentro de `BASE_FISCAL_PATH`, y el nombre de esa carpeta debe ser el `terminalUUID` de esa caja.
 
+#### Ejemplo de Estructura en Windows
 
-
-
-# Manual de Flags para Impresoras Fiscales The Factory HKA
-
-## 1. ¿Qué son los Flags?
-
-Los "Flags" (o Banderas) son configuraciones internas que controlan el comportamiento de la impresora fiscal. Permiten activar, desactivar o modificar funcionalidades específicas, como el cálculo de impuestos (IGTF), el formato de los precios o la impresión de códigos de barras.
-
-Cada Flag se identifica con un número de 2 dígitos y se le asigna un valor, también de 2 dígitos.
-
-## 2. ¿Cómo se programa un Flag?
-
-Para programar un Flag, se utiliza el comando `PJ` seguido del número del Flag y el valor que se le quiere asignar.
-
-**Formato del Comando:**
-`PJ<NumeroFlag><ValorFlag>`
-
-* **`NumeroFlag`**: El identificador del Flag (2 dígitos).
-* **`ValorFlag`**: El valor de configuración que se le asignará (2 dígitos).
-
-**Ejemplo Práctico:**
-Para activar el modo IGTF, se debe poner el **Flag 50** en el valor **01**. El comando a enviar sería:
+Si `BASE_FISCAL_PATH` es `C:\ServidorFiscal`:
 
 ```
+C:\ServidorFiscal\
+|
++--- 761beb8e-117b-4afe-bb3f-f71b1c75bf38\  <-- UUID Caja 1
+|    |
+|    +--- IntTFHKA.exe
+|    +--- (otros .dll o archivos requeridos por el driver)
+|
++--- a2b8e1f0-55d4-4a2e-83a0-9f8e2a1b9c4d\  <-- UUID Caja 2
+|    |
+|    +--- IntTFHKA.exe
+|
++--- f4c1e9f2-8c4b-4f1e-a8d2-9b3e1f2a0d5c\  <-- UUID Caja 3
+     |
+     +--- IntTFHKA.exe
+```
 
-PJ5001
+#### Ejemplo de Estructura en Linux
 
-````
+Si `BASE_FISCAL_PATH` es `/home/zante`:
 
-Este comando se envía a la impresora a través de la utilidad `IntTfhka.exe` (o `Tfinulx` en Linux):
+```
+/home/zante/
+|
++--- 761beb8e-117b-4afe-bb3f-f71b1c75bf38/  <-- UUID Caja 1
+|    |
+|    +--- tfinulx
+|
++--- a2b8e1f0-55d4-4a2e-83a0-9f8e2a1b9c4d/  <-- UUID Caja 2
+|    |
+|    +--- tfinulx
+|
++--- f4c1e9f2-8c4b-4f1e-a8d2-9b3e1f2a0d5c/  <-- UUID Caja 3
+     |
+     +--- tfinulx
+```
+**Nota sobre Linux:** Asegúrate de que el archivo `tfinulx` tenga permisos de ejecución:
+`chmod +x /home/zante/761beb8e-117b-4afe-bb3f-f71b1c75bf38/tfinulx`
+
+---
+
+## ▶️ Ejecución del Servidor
+
+Una vez configurado, simplemente ejecuta el script con Python:
+
 ```bash
-# En Windows
-IntTFHKA SendCmd(PJ5001)
+python servidor_impresion_adaptado.py
+```
 
-# En Linux
-./Tfinulx SendCmd(PJ5001)
-````
+El servidor se iniciará en `http://0.0.0.0:5000` y estará listo para recibir solicitudes de tu aplicación POS.
 
------
+---
 
-## 3\. Guía de Flags Esenciales
+## 🔌 API Endpoints
 
-A continuación se detallan los Flags más importantes para la integración de un sistema de punto de venta.
+### Impresión Fiscal
 
-### Flag 50 - Impuesto a las Grandes Transacciones Financieras (IGTF)
+#### `POST /imprimir-factura-fiscal`
+Envía una factura fiscal.
 
-Este es el Flag más importante para cumplir con la normativa fiscal venezolana sobre pagos en divisas.
-
-  * **Descripción**: Habilita o deshabilita el cálculo e impresión del IGTF. 
-  * **Valores**:
-      * `00`: **Desactivado**. La impresora no calculará IGTF. Los medios de pago del 20 al 24 (reservados para divisas) estarán bloqueados. El cierre de factura se hace con los comandos `1xx` normales.
-      * `01`: **Activado**. La impresora calculará automáticamente el IGTF cuando se usen los medios de pago del 20 al 24. **Es obligatorio cerrar TODOS los documentos fiscales (facturas, notas de crédito, etc.) con el comando `199`**, sin importar si la venta se pagó en bolívares o divisas.
-  * **Comando para Activar**:
-    ```
-    PJ5001
-    ```
-
-### Flag 21 - Formato de Montos y Precios
-
-Este Flag define cómo la impresora interpreta los números en los comandos de productos, específicamente la cantidad de dígitos enteros y decimales. Es crucial para evitar errores de formato en los precios.
-
-  * **Descripción**: Cambia la precisión de los precios unitarios de los productos.
-  * **Valores Comunes**:
-      * `00`: **Estándar**. El precio se interpreta como 8 enteros y 2 decimales (Ej: `12345678.99`). Este es el valor por defecto y el más compatible.
-      * `01`: El precio se interpreta como 7 enteros y 3 decimales.
-      * `02`: El precio se interpreta como 6 enteros y 4 decimales.
-  * **Comando para modo estándar**:
-    ```
-    PJ2100
-    ```
-  * **Observación**: Para la mayoría de las integraciones, se recomienda mantener este Flag en `00` para asegurar la compatibilidad.
-
-### Flag 30 - Impresión de Códigos de Barras
-
-Controla si el número legible por humanos se imprime junto al código de barras.
-
-  * **Descripción**: Define la visualización del número asociado a un código de barras.
-  * **Valores**:
-      * `00`: Imprime el código de barras **sin** el número debajo.
-      * `01`: Imprime el código de barras **con** el número asociado debajo. 
-  * **Comando para imprimir con número**:
-    ```
-    PJ3001
+* **Body (JSON):**
+    ```json
+    {
+      "terminalUUID": "761beb8e-117b-4afe-bb3f-f71b1c75bf38",
+      "cliente": {
+        "razon_social": "Cliente de Prueba",
+        "rif": "V123456789"
+      },
+      "items": [
+        {
+          "descripcion": "Producto 1",
+          "cantidad": 1.0,
+          "precio_unitario_con_iva": 10.0,
+          "tasa_iva": 16.0
+        },
+        {
+          "descripcion": "Producto 2 Exento",
+          "cantidad": 2.0,
+          "precio_unitario_con_iva": 5.0,
+          "tasa_iva": 0.0
+        }
+      ],
+      "pagos": [
+        { "slot_fiscal": 1, "monto": 20.0 }
+      ]
+    }
     ```
 
-### Flag 43 - Tipo de Código de Barras
+#### `POST /imprimir-reporte-fiscal`
+Imprime un reporte X o Z.
 
-Selecciona el formato del código de barras a imprimir.
-
-  * **Descripción**: Define la simbología del código de barras.
-  * **Valores Comunes**:
-      * `00`: EAN-13
-      * `02`: Code 128 
-      * `03`: Code 39 
-      * `04`: Código QR
-  * **Comando para seleccionar QR**:
+* **Body (JSON):**
+    ```json
+    {
+      "terminalUUID": "761beb8e-117b-4afe-bb3f-f71b1c75bf38",
+      "tipo": "X" 
+    }
     ```
-    PJ4304
-    ```
+    (Usar `"tipo": "Z"` para el Reporte Z)
 
-### Flag 63 - Formato de Reportes y Status
+#### `GET /estado-impresora-fiscal/<terminal_uuid>`
+Consulta el estado de la impresora fiscal (papel, errores, etc.).
 
-Este es un Flag avanzado que modifica la longitud de los datos que la impresora devuelve al solicitar reportes (como el Reporte X) o estados (como el Status S2).
-
-  * **Descripción**: Controla si las respuestas de la impresora usan un formato de datos "reducido" (legacy) o "ampliado" (moderno, con campos más largos para IGTF).
-  * **Valores Clave (Modo IGTF)**:
-      * `16` y `18`: Formato **reducido** con campos para IGTF.
-      * `17` y `19`: Formato **ampliado** con campos para IGTF.
-  * **Observación**: Para nuevas integraciones, se recomienda usar los valores de formato ampliado (`17` o `19`) ya que proporcionan campos más grandes y son más robustos a futuro. Sin embargo, esto requiere que el software que lee la respuesta de la impresora esté preparado para procesar una cadena de texto más larga.
-  * **Comando para modo ampliado con IGTF**:
-    ```
-    PJ6317
+* **Ejemplo de URL:** `http://localhost:5000/estado-impresora-fiscal/761beb8e-117b-4afe-bb3f-f71b1c75bf38`
+* **Respuesta Exitosa:**
+    ```json
+    {
+      "status_code": 4,
+      "status_descripcion": "En modo fiscal y en espera.",
+      "error_code": 0,
+      "error_descripcion": "No hay error."
+    }
     ```
 
------
+#### `POST /test-fiscal/<terminal_uuid>`
+Envía un comando de diagnóstico simple (Comando `D`) a la impresora fiscal.
 
-**Nota Final**: La cantidad y función de los Flags puede variar ligeramente entre modelos de impresora. Esta guía cubre los más comunes y esenciales basados en la documentación V8.5.0.
+* **Ejemplo de URL:** `http://localhost:5000/test-fiscal/761beb8e-117b-4afe-bb3f-f71b1c75bf38`
+
+### Impresión No Fiscal (Tickera)
+
+#### `GET /diagnostico`
+Intenta conectarse a la impresora no fiscal (definida por `VENDOR_ID` y `PRODUCT_ID`). Útil para verificar la conexión y el driver (Zadig).
+
+#### `POST /imprimir-factura`
+Imprime una Nota de Entrega o Recibo de Pago no fiscal.
+
+* **Body (JSON):** (Revisa el código para ver la estructura completa del JSON esperado).
+
+#### `POST /imprimir-comanda`
+Imprime una comanda de cocina.
+
+* **Body (JSON):** (Revisa el código para ver la estructura completa del JSON esperado).
+
+---
+
+## ⚠️ Solución de Problemas Comunes
+
+1.  **Error (No Fiscal): `¡Tickera USB no encontrada!`**
+    * **En Windows:** No has usado **Zadig** para instalar el driver `libusb`. Este es el error más común.
+    * **En Linux/Windows:** Verifica que `VENDOR_ID` y `PRODUCT_ID` en el script coincidan exactamente con los de tu impresora.
+
+2.  **Error (Fiscal): `EJECUTABLE NO ENCONTRADO`**
+    * Verifica que la variable `BASE_FISCAL_PATH` sea correcta.
+    * Asegúrate de que la carpeta con el nombre `terminalUUID` que envías desde el POS existe dentro de `BASE_FISCAL_PATH`.
+    * Asegúrate de que el archivo `IntTFHKA.exe` (o `tfinulx`) esté **dentro** de esa carpeta UUID.
+
+3.  **Error (Fiscal): `Timeout: La impresora... no respondió`**
+    * La impresora está desconectada o apagada.
+    * **En Windows:** El puerto COM configurado en el driver fiscal no es el correcto.
+    * **En Linux:** El usuario que ejecuta Python no tiene permisos para acceder al puerto serial/USB (ej. `/dev/ttyUSB0`). Añade tu usuario al grupo `dialout`: `sudo usermod -a -G dialout $USER` (y reinicia la sesión).
+
+4.  **Error (Fiscal): `El archivo fue procesado... Retorno: 0` o `Fallo en SendFileCmd... se esperaban X, se enviaron 0`**
+    * Este es el error de caché del SO. La versión del script en este repositorio ya incluye `fsync` y `sync` para prevenirlo. Si ves este error, asegúrate de estar usando la última versión del script.
